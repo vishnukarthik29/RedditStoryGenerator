@@ -135,3 +135,93 @@ MIT License
 
 - Inspired by the trend of Reddit content videos on social media platforms
 - Thanks to the creators of PRAW, MoviePy, and pyttsx3 libraries
+
+# Reddit Story Generator - Fix Guide
+
+## Overview of the Issues
+
+Your Reddit Story Generator is encountering errors related to:
+
+1. Outdated Pillow version compatibility:
+   - `module 'PIL.Image' has no attribute 'ANTIALIAS'`
+   - `'ImageDraw' object has no attribute 'textsize'`
+2. Outdated PRAW version warning
+
+## Solution Steps
+
+### 1. Update Dependencies
+
+```bash
+pip install --upgrade pillow praw
+```
+
+Or update all dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Apply Code Fixes
+
+#### Option A: Manual Fix
+
+Replace the following files with the fixed versions:
+
+- `video/background.py`
+- `video/text_overlay.py`
+
+#### Option B: Automated Fix
+
+Create a file called `fix_compatibility.py` using the code provided in the first artifact, then run:
+
+```bash
+python fix_compatibility.py
+```
+
+### 3. Check Asset Files
+
+Ensure your assets folders are properly set up:
+
+- `assets/backgrounds/` should contain at least one mp4 file
+- `assets/fonts/` should contain your font files
+
+If you're using a custom font, make sure it exists at the specified path.
+
+### 4. Common Issues and Solutions
+
+#### Cannot find font file
+
+If you see a warning about font file not found, either:
+
+1. Place your font file at the expected location
+2. Or modify the code to use a system font that exists on your computer
+
+#### Video backgrounds not working
+
+If video backgrounds cause issues:
+
+1. Check that you have FFmpeg installed
+2. Try using an image background instead to test
+
+#### AudioFileClip errors
+
+If you encounter errors with TTS audio files:
+
+1. Make sure you're using a compatible version of moviepy
+2. Check that pyttsx3 is properly installed
+
+## Running Your Generator
+
+After applying these fixes, run your generator with:
+
+```bash
+python main.py AmItheAsshole
+```
+
+## Need More Help?
+
+If you continue to experience issues:
+
+1. Check the logs for specific error messages
+2. Make sure all dependencies are correctly installed
+3. Consider updating all dependencies to their latest versions

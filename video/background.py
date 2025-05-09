@@ -1,107 +1,70 @@
+"""
+Updated background.py with fixes for Pillow compatibility
+"""
 import os
 import random
 import logging
-from typing import List, Optional
-from moviepy.editor import VideoFileClip
-
-import config
-
-logger = logging.getLogger(__name__)
+from PIL import Image, ImageFilter
 
 class BackgroundManager:
-    """Manage background videos for the Reddit video generator."""
+    def __init__(self, backgrounds_dir):
+        """Initialize the background manager with a directory of background videos/images."""
+        self.backgrounds_dir = backgrounds_dir
+        self.logger = logging.getLogger(__name__)
+        self.logger.info(f"Background manager initialized with directory {backgrounds_dir}")
     
-    def __init__(self, background_dir: str = config.BACKGROUND_DIR):
-        """
-        Initialize the background manager.
-        
-        Args:
-            background_dir: Directory containing background videos
-        """
-        self.background_dir = background_dir
-        self.video_extensions = ['.mp4', '.avi', '.mov', '.mkv']
-        logger.info(f"Background manager initialized with directory {background_dir}")
-    
-    def get_available_backgrounds(self) -> List[str]:
-        """
-        Get list of available background videos.
-        
-        Returns:
-            List of paths to background videos
-        """
-        backgrounds = []
-        
-        if not os.path.exists(self.background_dir):
-            logger.warning(f"Background directory {self.background_dir} does not exist")
-            return backgrounds
-            
-        for filename in os.listdir(self.background_dir):
-            file_path = os.path.join(self.background_dir, filename)
-            if os.path.isfile(file_path) and any(filename.lower().endswith(ext) for ext in self.video_extensions):
-                backgrounds.append(file_path)
-                
-        logger.info(f"Found {len(backgrounds)} background videos")
-        return backgrounds
-    
-    def select_random_background(self) -> Optional[str]:
-        """
-        Select a random background video.
-        
-        Returns:
-            Path to selected background video, or None if no backgrounds are available
-        """
-        backgrounds = self.get_available_backgrounds()
-        
-        if not backgrounds:
-            logger.warning("No background videos available")
+    def get_random_background(self):
+        """Return a random background video or image from the backgrounds directory."""
+        if not os.path.exists(self.backgrounds_dir):
+            self.logger.warning(f"Backgrounds directory not found: {self.backgrounds_dir}")
             return None
-            
-        selected = random.choice(backgrounds)
-        logger.info(f"Selected background video: {selected}")
-        return selected
-    
-    def get_background_clip(self, path: Optional[str] = None, duration: float = config.VIDEO_DURATION) -> Optional[VideoFileClip]:
-        """
-        Get a background video clip.
         
-        Args:
-            path: Path to background video (if None, a random one is selected)
-            duration: Duration of the clip in seconds
-            
-        Returns:
-            VideoFileClip object, or None if no background is available
-        """
-        if path is None:
-            path = self.select_random_background()
-            
-        if not path or not os.path.exists(path):
-            logger.error(f"Background video not found: {path}")
+        # Get all files in the backgrounds directory
+        background_files = [f for f in os.listdir(self.backgrounds_dir) 
+                           if f.endswith(('.mp4', '.mov', '.avi', '.png', '.jpg', '.jpeg'))]
+        
+        if not background_files:
+            self.logger.warning(f"No background files found in {self.backgrounds_dir}")
             return None
-            
+        
+        self.logger.info(f"Found {len(background_files)} background videos")
+        
+        # Select a random background
+        selected_bg = os.path.join(self.backgrounds_dir, random.choice(background_files))
+        self.logger.info(f"Selected background video: {selected_bg}")
+        
+        return selected_bg
+    
+    def resize_background(self, image, target_width, target_height):
+        """Resize a background image to the target dimensions while maintaining aspect ratio."""
         try:
-            # Load the video clip
-            clip = VideoFileClip(path)
+            # Calculate aspect ratios
+            img_aspect = image.width / image.height
+            target_aspect = target_width / target_height
             
-            # Resize to match target dimensions
-            clip = clip.resize(height=config.VIDEO_HEIGHT)
+            if img_aspect > target_aspect:
+                # Image is wider than target, crop width
+                new_width = int(target_aspect * image.height)
+                left = (image.width - new_width) // 2
+                image = image.crop((left, 0, left + new_width, image.height))
+            elif img_aspect < target_aspect:
+                # Image is taller than target, crop height
+                new_height = int(image.width / target_aspect)
+                top = (image.height - new_height) // 2
+                image = image.crop((0, top, image.width, top + new_height))
             
-            # Center crop to match target width
-            clip_width = clip.w
-            if clip_width > config.VIDEO_WIDTH:
-                x_center = clip_width / 2
-                x1 = x_center - (config.VIDEO_WIDTH / 2)
-                clip = clip.crop(x1=x1, y1=0, x2=x1 + config.VIDEO_WIDTH, y2=config.VIDEO_HEIGHT)
-            
-            # Loop the clip if it's shorter than the target duration
-            if clip.duration < duration:
-                clip = clip.loop(duration=duration)
-            
-            # Trim if longer than target duration
-            if clip.duration > duration:
-                clip = clip.subclip(0, duration)
-                
-            logger.info(f"Background clip prepared (duration: {clip.duration}s)")
-            return clip
+            # Resize to target dimensions
+            # Updated to use LANCZOS instead of ANTIALIAS
+            return image.resize((target_width, target_height), Image.LANCZOS)
+        
         except Exception as e:
-            logger.error(f"Error loading background video {path}: {e}")
+            self.logger.error(f"Error resizing background image: {e}")
             return None
+    
+    def apply_blur(self, image, blur_radius=5):
+        """Apply a blur effect to the background image."""
+        try:
+            return image.filter(ImageFilter.GaussianBlur(blur_radius))
+        except Exception as e:
+            self.logger.error(f"Error applying blur to background image: {e}")
+            return image
