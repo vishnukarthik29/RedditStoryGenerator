@@ -1,7 +1,12 @@
-"""
-Updated main.py to work with dictionary-based Reddit posts
-"""
+# Add these imports at the top of main.py
+import logging
 import os
+import sys
+from PIL import Image
+
+# Add this monkey patch for Pillow 9.0.0+
+if not hasattr(Image, 'ANTIALIAS'):
+    Image.ANTIALIAS = Image.LANCZOS
 import argparse
 import logging
 import time

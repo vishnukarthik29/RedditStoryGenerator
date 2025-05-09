@@ -1,127 +1,114 @@
-"""
-Updated text_overlay.py with fixes for Pillow compatibility
-"""
+# Step 1: First, let's look at the entire file structure and find all instances of getsize
+
+# Run these commands in the terminal to find all instances:
+# cd C:\Users\vk\Desktop\Reddit Story Generator
+# findstr /s "getsize" video\text_overlay.py
+
+# Or use this Python script to find all instances:
+import re
+
+with open(r"C:\Users\vk\Desktop\Reddit Story Generator\video\text_overlay.py", "r") as file:
+    content = file.read()
+    
+matches = re.findall(r"\.getsize\(", content)
+print(f"Found {len(matches)} instances of .getsize()")
+
+# Step 2: Create a complete replacement for text_overlay.py
+# Replace the entire file content with this updated version:
+
 import os
 import textwrap
-import logging
 from PIL import Image, ImageDraw, ImageFont
 
 class TextOverlayGenerator:
     def __init__(self, font_path=None, font_size=40, text_color=(255, 255, 255)):
         """Initialize the text overlay generator."""
-        self.logger = logging.getLogger(__name__)
+        if font_path is None:
+            font_path = os.path.join(os.path.dirname(__file__), "../assets/fonts/Roboto-Regular.ttf")
         
-        # Try to load the specified font
-        self.font = None
-        if font_path and os.path.exists(font_path):
-            try:
-                self.font = ImageFont.truetype(font_path, font_size)
-            except Exception as e:
-                self.logger.warning(f"Failed to load font {font_path}: {e}")
-        
-        # Use default font if specified font not available
-        if self.font is None:
-            try:
-                # Try to use a system font
-                self.font = ImageFont.truetype("arial.ttf", font_size)
-            except Exception:
-                try:
-                    # Try DejaVuSans as a fallback
-                    self.font = ImageFont.truetype("DejaVuSans.ttf", font_size)
-                except Exception:
-                    # Last resort: use default font
-                    self.font = ImageFont.load_default()
-                    self.logger.warning(f"Font file not found: {font_path}. Using default font.")
-        
-        self.text_color = text_color
+        self.font_path = font_path
         self.font_size = font_size
+        self.font = ImageFont.truetype(font_path, font_size)
+        self.text_color = text_color
+        self.padding = 50
+        self.line_spacing = 10
+        
+        # Log initialization
+        import logging
+        self.logger = logging.getLogger(__name__)
         self.logger.info("Text overlay generator initialized")
     
-    def create_text_overlay(self, text, width, height, padding=20, line_spacing=10):
-        """Create an image with text overlay."""
+    def get_font_dimensions(self, text):
+        """Helper function to get text dimensions that works with both old and new Pillow versions"""
+        try:
+            # For older Pillow versions
+            return self.font.getsize(text)
+        except AttributeError:
+            # For newer Pillow versions (9.2.0+)
+            bbox = self.font.getbbox(text)
+            width = bbox[2] - bbox[0]  # right - left
+            height = bbox[3] - bbox[1]  # bottom - top
+            return width, height
+    
+    def create_text_overlay(self, text, width, height):
+        """Create a text overlay image with the specified text."""
         # Create a transparent image
-        overlay = Image.new('RGBA', (width, height), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(overlay)
+        img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
         
-        # Calculate maximum text width
-        max_text_width = width - (2 * padding)
+        # Calculate the maximum width for text
+        max_text_width = width - (self.padding * 2)
         
         # Wrap text to fit within the width
         wrapped_text = self._wrap_text(text, max_text_width)
         
-        # Calculate text dimensions
-        # Updated to use getsize instead of textsize
-        text_height = 0
-        longest_line_width = 0
-        line_heights = []
-        
+        # Calculate total text height
+        total_height = 0
         for line in wrapped_text:
-            # Using font.getsize as the replacement for draw.textsize
-            line_width, line_height = self.font.getsize(line)
-            line_heights.append(line_height)
-            text_height += line_height + line_spacing
-            longest_line_width = max(longest_line_width, line_width)
+            line_width, line_height = self.get_font_dimensions(line)
+            total_height += line_height + self.line_spacing
         
-        # Remove the last line spacing
-        if wrapped_text:
-            text_height -= line_spacing
+        # Remove last line spacing
+        if total_height > 0:
+            total_height -= self.line_spacing
         
-        # Calculate text position (centered)
-        x = (width - longest_line_width) // 2
-        y = (height - text_height) // 2
+        # Calculate starting y position to center text vertically
+        y = (height - total_height) // 2
         
-        # Draw text
-        current_y = y
-        for i, line in enumerate(wrapped_text):
-            draw.text((x, current_y), line, font=self.font, fill=self.text_color)
-            current_y += line_heights[i] + line_spacing
+        # Draw each line of text
+        for line in wrapped_text:
+            line_width, line_height = self.get_font_dimensions(line)
+            x = (width - line_width) // 2  # Center text horizontally
+            draw.text((x, y), line, font=self.font, fill=self.text_color)
+            y += line_height + self.line_spacing
         
-        return overlay
+        return img
     
     def _wrap_text(self, text, max_width):
-        """Wrap text to fit within a given width."""
+        """Wrap text to fit within max_width."""
+        words = text.split()
         wrapped_lines = []
+        current_line = []
         
-        # Split text into paragraphs
-        paragraphs = text.split('\n')
-        
-        for paragraph in paragraphs:
-            if not paragraph:
-                wrapped_lines.append('')
-                continue
+        for word in words:
+            # Try adding the word to the current line
+            test_line = ' '.join(current_line + [word])
+            line_width, _ = self.get_font_dimensions(test_line)
             
-            # Start with a reasonable character estimate
-            avg_char_width = self.font_size * 0.6  # Rough estimate
-            chars_per_line = int(max_width / avg_char_width)
-            
-            # Use textwrap to wrap the paragraph
-            lines = textwrap.wrap(paragraph, width=chars_per_line)
-            
-            # Adjust wrapping if needed
-            final_lines = []
-            for line in lines:
-                # Using font.getsize as the replacement for draw.textsize
-                line_width, _ = self.font.getsize(line)
-                
-                if line_width <= max_width:
-                    final_lines.append(line)
+            if line_width <= max_width:
+                # Word fits, add it to the current line
+                current_line.append(word)
+            else:
+                # Word doesn't fit, start a new line
+                if current_line:
+                    wrapped_lines.append(' '.join(current_line))
+                    current_line = [word]
                 else:
-                    # Further split the line if it's still too long
-                    words = line.split()
-                    current_line = words[0]
-                    
-                    for word in words[1:]:
-                        test_line = current_line + " " + word
-                        test_width, _ = self.font.getsize(test_line)
-                        
-                        if test_width <= max_width:
-                            current_line = test_line
-                        else:
-                            final_lines.append(current_line)
-                            current_line = word
-                    
-                    final_lines.append(current_line)
-            
-            wrapped_lines.extend(final_lines)
+                    # If the word is too long by itself, force it onto its own line
+                    wrapped_lines.append(word)
+        
+        # Add the last line if there is one
+        if current_line:
+            wrapped_lines.append(' '.join(current_line))
         
         return wrapped_lines
